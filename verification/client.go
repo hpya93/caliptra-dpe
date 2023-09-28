@@ -215,6 +215,9 @@ func (c *Client[_, _]) GetCertificateChain() (*GetCertificateChainResp, error) {
 
 		_, err := execCommand(c.transport, CommandGetCertificateChain, c.Profile, cmd, &respStruct)
 		if err == StatusInvalidArgument {
+			if int(cmd.Size) > MaxChunkSize {
+				return nil, StatusInvalidArgument
+			}
 			// This indicates that there are no more bytes to be read in certificate chain
 			break
 		} else if err != nil {
@@ -234,6 +237,18 @@ func (c *Client[_, _]) GetCertificateChain() (*GetCertificateChainResp, error) {
 		return nil, errors.New("empty certificate chain")
 	}
 	return &certs, nil
+}
+
+// DeriveChild() calls the DPE CertifyKey command.
+func (c *Client[_, Digest]) DeriveChild(cmd *DeriveChildReq[Digest]) (*DeriveChildResp[Digest], error) {
+	var respStruct DeriveChildResp[Digest]
+
+	_, err := execCommand(c.transport, CommandDeriveChild, c.Profile, cmd, &respStruct)
+	if err != nil {
+		return nil, err
+	}
+
+	return &respStruct, nil
 }
 
 // TagTCI calls the DPE TagTCI command.

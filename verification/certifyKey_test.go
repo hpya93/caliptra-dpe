@@ -100,13 +100,13 @@ type TcgUeidExtension struct {
 
 type Fwid struct {
 	HashAlg string
-	Digest  string
+	Digest  []byte
 }
 
 type DiceTcbInfo struct {
 	Fwids      []Fwid
-	VendorInfo string
-	Type       string
+	VendorInfo []byte
+	Type       []byte
 }
 
 type TcgMultiTcbInfo struct {
@@ -138,7 +138,7 @@ func TestCertifyKey_SimulationMode(t *testing.T) {
 			log.Fatalf("[FATAL]: %s", err.Error())
 		}
 	}
-	testCertifyKey(instance, t, true)
+	testCertifyKey(instance, t)
 }
 
 // Ignores critical extensions that are unknown to x509 package
@@ -240,8 +240,10 @@ func checkCertifyKeyTcgUeidExtension(t *testing.T, c *x509.Certificate, label []
 
 // A tcg-dice-MultiTcbInfo extension.
 // This extension SHOULD be marked as critical.
-func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) {
+func parseCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) (*TcgMultiTcbInfo, error) {
 	t.Helper()
+	var multiTcbInfo *TcgMultiTcbInfo
+	var err error
 
 	// Check MultiTcbInfo Extension
 	//tcg-dice-MultiTcbInfo extension
@@ -250,7 +252,7 @@ func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) {
 			if !ext.Critical {
 				t.Errorf("[ERROR]: TCG DICE MultiTcbInfo extension is not marked as CRITICAL")
 			}
-			multiTcbInfo, err := parseMultiTcbInfo(ext.Value)
+			multiTcbInfo, err = parseMultiTcbInfo(ext.Value)
 			if err != nil {
 				// multiTcb info is not provided in leaf
 				t.Errorf("[ERROR]: Failed to unmarshal MultiTcbInfo field: %v", err)
@@ -260,6 +262,7 @@ func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) {
 			break
 		}
 	}
+	return multiTcbInfo, err
 }
 
 func parseMultiTcbInfo(der []byte) (*TcgMultiTcbInfo, error) {
@@ -329,7 +332,7 @@ func parseMultiTcbInfo(der []byte) (*TcgMultiTcbInfo, error) {
 						return nil, errors.New(msg)
 					}
 
-					fwid := Fwid{HashAlg: hashAlg.String(), Digest: fmt.Sprintf("%x", digest)}
+					fwid := Fwid{HashAlg: hashAlg.String(), Digest: digest}
 
 					d.Fwids = append(d.Fwids, fwid)
 
@@ -350,7 +353,7 @@ func parseMultiTcbInfo(der []byte) (*TcgMultiTcbInfo, error) {
 					msg := fmt.Sprintf("vendor info in dice tcb element %d is malformed", dindex)
 					return nil, errors.New(msg)
 				}
-				d.VendorInfo = fmt.Sprintf("%x", vendorInfo)
+				d.VendorInfo = vendorInfo
 			} else if diceTcbRaw.PeekASN1Tag(cryptobyte_asn1.Tag(9).ContextSpecific()) {
 				// 	type 		[9] IMPLICIT OCTET STRING OPTIONAL,
 				var typeInfo cryptobyte.String
@@ -362,7 +365,7 @@ func parseMultiTcbInfo(der []byte) (*TcgMultiTcbInfo, error) {
 					msg := fmt.Sprintf("type info in dice tcb element %d is malformed", dindex)
 					return nil, errors.New(msg)
 				}
-				d.Type = fmt.Sprintf("%x", typeInfo)
+				d.Type = typeInfo
 			}
 
 			if len(diceTcbRaw) == 0 {
@@ -493,12 +496,36 @@ func validateCertifyKeyCert(t *testing.T, c *x509.Certificate, flags uint32, lab
 	// Check extended key usage extensions
 	checkCertifyKeyExtendedKeyUsages(t, c)
 
-	// Check critical TCG extensions
+	// Check critical UEID and Multi Tcb Info TCG extensions
 	// Check UEID extension
 	checkCertifyKeyTcgUeidExtension(t, c, label)
 
-	// Check MultiTcbInfo Extension
-	checkCertifyKeyMultiTcbInfoExtension(t, c)
+	// Check MultiTcbInfo Extension structure
+	parseCertifyKeyMultiTcbInfoExtension(t, c)
+}
+
+// Test whether INPUT_TYPE field in DeriveChild Request, a caller-supplied measurement type.
+// populates the “type” field in the DiceTcbInfo extension for this measurement.
+func checkDiceTcbInfo(t *testing.T, c *x509.Certificate, inputType uint32) {
+	multiTcbInfo, err := parseCertifyKeyMultiTcbInfoExtension(t, c)
+	if err != nil {
+		t.Errorf("[ERROR]: Unable to parse Multi TCB Extension information and check the type field in Dice TCB block of TCI node derived.")
+		return
+	}
+	isMatchFound := false
+	inputTypeBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(inputTypeBytes, inputType)
+	for _, diceTcb := range multiTcbInfo.DiceTcbInfos {
+		if reflect.DeepEqual(diceTcb.Type, inputTypeBytes) {
+			isMatchFound = true
+			break
+		}
+	}
+	if !isMatchFound {
+		t.Error("[ERROR]: Dice TCB information does not incorporate TCI Type data passed to the context")
+	} else {
+		t.Log("[LOG]: Dice TCB information is incorporated into the TCI Type data passed to the context")
+	}
 }
 
 func checkCertificateStructure(t *testing.T, certBytes []byte) *x509.Certificate {
@@ -584,21 +611,18 @@ func testCertifyKey(d TestDPEInstance, t *testing.T, use_simulation bool) {
 
 	var ctx ContextHandle
 	var initCtxResp *InitCtxResp
-	if use_simulation {
-		if d.GetSupport().Simulation {
-			initCtxResp, err := client.InitializeContext(NewInitCtxIsSimulation())
-			if err != nil {
-				t.Fatal("The instance should be able to create a simulation context.")
-			}
-			// Could prove difficult to prove it is a cryptographically secure random.
-			if initCtxResp.Handle == [16]byte{0} {
-				t.Fatal("Incorrect simulation context handle.")
-			}
 
-			defer client.DestroyContext(NewDestroyCtx(initCtxResp.Handle, false))
-		} else {
-			t.Errorf("[ERROR]:  DPE instance doesn't support simulation contexts.")
+	if d.GetSupport().Simulation {
+		initCtxResp, err := client.InitializeContext(NewInitCtxIsSimulation())
+		if err != nil {
+			t.Fatal("The instance should be able to create a simulation context.")
 		}
+		// Could prove difficult to prove it is a cryptographically secure random.
+		if initCtxResp.Handle == [16]byte{0} {
+			t.Fatal("Incorrect simulation context handle.")
+		}
+
+		defer client.DestroyContext(NewDestroyCtx(initCtxResp.Handle, false))
 	}
 	if initCtxResp == nil {
 		//default context
@@ -651,8 +675,63 @@ func testCertifyKey(d TestDPEInstance, t *testing.T, use_simulation bool) {
 		// Ensure full certificate chain has valid signatures
 		// This also checks certificate lifetime, signatures as part of cert chain validation
 		validateCertChain(t, certChain, leafCert)
+	}
 
-		// TODO: When DeriveChild is implemented, call it here to add more TCIs and call CertifyKey again.
+	// When DeriveChild is implemented, call it here to add more TCIs
+	// and call CertifyKey again.
+	dreq := DeriveChildReq[SHA256Digest]{
+		ContextHandle:  [16]byte{0},
+		InputData:      SHA256Digest{0},
+		Flags:          1<<InputAllowCA | 1<<InputAllowX509 | 1<<MakeDefault,
+		InputType:      1,
+		TargetLocality: 0,
+	}
+	dresp, err := client.DeriveChild(&dreq)
+	if err != nil {
+		t.Fatalf("[FATAL]: Derive child command failed with error: %v", err)
+	}
+
+	certifyKeyReq = []CertifyKeyReq[SHA256Digest]{
+		{
+			ContextHandle: dresp.NewContextHandle,
+			Flags:         0,
+			Label:         [32]byte{},
+			Format:        CertifyKeyX509,
+		},
+	}
+
+	for _, r := range certifyKeyReq {
+		// Get DPE leaf certificate from CertifyKey
+		certifyKeyResp, err := client.CertifyKey(&r)
+		if err != nil {
+			t.Fatalf("[FATAL]: Could not certify key: %v", err)
+		}
+
+		// Get root and intermediate certificates to validate certificate chain of leaf cert
+		getCertificateChainResp, err := client.GetCertificateChain()
+		if err != nil {
+			t.Fatalf("[FATAL]: Could not get Certificate Chain: %v", err)
+		}
+
+		leafCertBytes := certifyKeyResp.Certificate
+		certChainBytes := getCertificateChainResp.CertificateChain
+
+		// Run X.509 linter on full certificate chain and file issues for errors
+		leafCert := checkCertificateStructure(t, leafCertBytes)
+		t.Logf("[LOG]: Leaf certificate is DER encoded")
+
+		certChain := checkCertificateChain(t, certChainBytes)
+		t.Logf("[LOG]: Certificate chain is DER encoded")
+
+		// Validate that all X.509 fields conform with the format defined in the DPE iRoT profile
+		validateCertifyKeyCert(t, leafCert, uint32(r.Flags), r.Label[:])
+
+		// Check type field in Dice TCB block
+		checkDiceTcbInfo(t, leafCert, dreq.InputType)
+
+		// Ensure full certificate chain has valid signatures
+		// This also checks certificate lifetime, signatures as part of cert chain validation
+		validateCertChain(t, certChain, leafCert)
 	}
 }
 
