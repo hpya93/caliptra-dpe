@@ -241,7 +241,7 @@ func checkCertifyKeyTcgUeidExtension(t *testing.T, c *x509.Certificate, label []
 
 // A tcg-dice-MultiTcbInfo extension.
 // This extension SHOULD be marked as critical.
-func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate)  (*TcgMultiTcbInfo, error) {
+func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) (*TcgMultiTcbInfo, error) {
 	t.Helper()
 	var multiTcbInfo *TcgMultiTcbInfo
 	var err error
