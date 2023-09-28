@@ -241,8 +241,10 @@ func checkCertifyKeyTcgUeidExtension(t *testing.T, c *x509.Certificate, label []
 
 // A tcg-dice-MultiTcbInfo extension.
 // This extension SHOULD be marked as critical.
-func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) {
+func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate)  (*TcgMultiTcbInfo, error) {
 	t.Helper()
+	var multiTcbInfo *TcgMultiTcbInfo
+	var err error
 
 	// Check MultiTcbInfo Extension
 	//tcg-dice-MultiTcbInfo extension
@@ -386,7 +388,7 @@ func parseMultiTcbInfo(der []byte) (*TcgMultiTcbInfo, error) {
 // The ExtendedKeyUsage extension SHOULD be marked as critical
 // If IsCA = true, the extension SHOULD contain tcg-dice-kp-eca
 // If IsCA = false, the extension SHOULD contain tcg-dice-kp-attestLoc
-func checkCertifyKeyExtendedKeyUsages(t *testing.T, c *x509.Certificate) {
+func checkCertifyKeyExtendedKeyUsages(t *testing.T, c *x509.Certificate) (*TcgMultiTcbInfo, error) {
 	t.Helper()
 	var multiTcbInfo *TcgMultiTcbInfo
 	var err error
@@ -437,6 +439,7 @@ func checkCertifyKeyExtendedKeyUsages(t *testing.T, c *x509.Certificate) {
 	if !isExtendedKeyUsageValid {
 		t.Errorf("[ERROR]: Certificate has IsCA: %v  and does not contain specified key usage: %s", c.IsCA, expectedKeyUsageName)
 	}
+	return multiTcbInfo, err
 }
 
 // Check for KeyUsage Extension as per spec
@@ -502,13 +505,13 @@ func validateCertifyKeyCert(t *testing.T, c *x509.Certificate, flags uint32, lab
 	checkCertifyKeyTcgUeidExtension(t, c, label)
 
 	// Check MultiTcbInfo Extension structure
-	parseCertifyKeyMultiTcbInfoExtension(t, c)
+	checkCertifyKeyMultiTcbInfoExtension(t, c)
 }
 
 // Test whether INPUT_TYPE field in DeriveChild Request, a caller-supplied measurement type.
 // populates the “type” field in the DiceTcbInfo extension for this measurement.
 func checkDiceTcbInfo(t *testing.T, c *x509.Certificate, inputType uint32) {
-	multiTcbInfo, err := parseCertifyKeyMultiTcbInfoExtension(t, c)
+	multiTcbInfo, err := checkCertifyKeyMultiTcbInfoExtension(t, c)
 	if err != nil {
 		t.Errorf("[ERROR]: Unable to parse Multi TCB Extension information and check the type field in Dice TCB block of TCI node derived.")
 		return
