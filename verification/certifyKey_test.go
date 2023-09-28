@@ -251,7 +251,7 @@ func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) {
 			if !ext.Critical {
 				t.Errorf("[ERROR]: TCG DICE MultiTcbInfo extension is not marked as CRITICAL")
 			}
-			multiTcbInfo, err = parseMultiTcbInfo(ext.Value)
+			multiTcbInfo, err := parseMultiTcbInfo(ext.Value)
 			if err != nil {
 				// multiTcb info is not provided in leaf
 				t.Errorf("[ERROR]: Failed to unmarshal MultiTcbInfo field: %v", err)
