@@ -12,6 +12,7 @@ use crate::{
     tci::{TciMeasurement, TciNodeData},
     U8Bool, DPE_PROFILE, INTERNAL_INPUT_INFO_SIZE, MAX_HANDLES,
 };
+use constant_time_eq::constant_time_eq;
 use crypto::{Crypto, Digest, Hasher};
 use platform::{Platform, MAX_CHUNK_SIZE};
 use zerocopy::{AsBytes, FromBytes};
@@ -33,7 +34,7 @@ pub struct DpeEnv<'a, T: DpeTypes + 'a> {
 #[repr(C, align(4))]
 #[derive(AsBytes, FromBytes)]
 pub struct DpeInstance {
-    pub(crate) contexts: [Context; MAX_HANDLES],
+    pub contexts: [Context; MAX_HANDLES],
     pub(crate) support: Support,
 
     /// Can only successfully execute the initialize context command for non-simulation (i.e.
@@ -140,7 +141,6 @@ impl DpeInstance {
     ) -> Result<usize, DpeErrorCode> {
         let idx = self.get_active_context_pos_internal(handle, locality)?;
         if idx >= self.contexts.len() {
-            // No idea if this is the correct error code
             return Err(DpeErrorCode::InternalError);
         }
         Ok(idx)
@@ -151,27 +151,31 @@ impl DpeInstance {
         handle: &ContextHandle,
         locality: u32,
     ) -> Result<usize, DpeErrorCode> {
-        let mut valid_handles = self
+        // find all active contexts whose localities match the locality parameter
+        let mut valid_localities = self
             .contexts
             .iter()
             .enumerate()
             .filter(|(_, context)| {
-                context.state == ContextState::Active && &context.handle == handle
+                context.state == ContextState::Active && context.locality == locality
             })
             .peekable();
-        if valid_handles.peek().is_none() {
-            return Err(DpeErrorCode::InvalidHandle);
+        if valid_localities.peek().is_none() {
+            return Err(DpeErrorCode::InvalidLocality);
         }
-        let mut valid_handles_and_localities = valid_handles
-            .filter(|(_, context)| context.locality == locality)
+
+        // filter down the contexts with valid localities based on their context handle matching the input context handle
+        // the locality and handle filters are separated so that we can return InvalidHandle or InvalidLocality upon getting no valid contexts accordingly
+        let mut valid_handles_and_localities = valid_localities
+            .filter(|(_, context)| constant_time_eq(&context.handle.0, &handle.0))
             .peekable();
         if valid_handles_and_localities.peek().is_none() {
-            return Err(DpeErrorCode::InvalidLocality);
+            return Err(DpeErrorCode::InvalidHandle);
         }
         let (i, _) = valid_handles_and_localities
             .find(|(_, context)| {
                 context.state == ContextState::Active
-                    && &context.handle == handle
+                    && constant_time_eq(&context.handle.0, &handle.0)
                     && context.locality == locality
             })
             .ok_or(DpeErrorCode::InternalError)?;
@@ -210,7 +214,12 @@ impl DpeInstance {
             env.crypto
                 .rand_bytes(&mut handle.0)
                 .map_err(|_| DpeErrorCode::RandError)?;
-            if !handle.is_default() && !self.contexts.iter().any(|c| c.handle == handle) {
+            if !handle.is_default()
+                && !self
+                    .contexts
+                    .iter()
+                    .any(|c| constant_time_eq(&c.handle.0, &handle.0))
+            {
                 return Ok(handle);
             }
         }
@@ -265,18 +274,12 @@ impl DpeInstance {
     }
 
     pub(crate) fn add_tci_measurement(
-        &mut self,
+        &self,
         env: &mut DpeEnv<impl DpeTypes>,
-        idx: usize,
+        context: &mut Context,
         measurement: &TciMeasurement,
         locality: u32,
     ) -> Result<(), DpeErrorCode> {
-        if idx >= MAX_HANDLES {
-            return Err(DpeErrorCode::MaxTcis);
-        }
-
-        let context = &mut self.contexts[idx];
-
         if context.state != ContextState::Active {
             return Err(DpeErrorCode::InvalidHandle);
         }
@@ -389,6 +392,49 @@ impl DpeInstance {
 
         hasher.finish().map_err(|_| DpeErrorCode::HashError)
     }
+
+    /// Determines if the context array represents a valid tree by checking that
+    /// there is only 1 connected component and that all nodes lead up to
+    /// the root node.
+    ///
+    /// # Arguments
+    ///
+    /// * `root_idx` - The index of the root context
+    pub fn validate_context_tree(&self, root_idx: usize) -> bool {
+        let mut seen = [false; MAX_HANDLES];
+
+        // dfs from the root node and try to discover invalid subtrees
+        if self.detect_invalid_subtree(root_idx, &mut seen) {
+            return false;
+        }
+
+        for (i, node_visited) in seen.iter().enumerate().take(MAX_HANDLES) {
+            // If a node was not seen when doing a dfs from the root, there must be multiple
+            // connected components or the root is not actually the root
+            if i != root_idx && self.contexts[i].state != ContextState::Inactive && !node_visited {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn detect_invalid_subtree(&self, curr_idx: usize, seen: &mut [bool; MAX_HANDLES]) -> bool {
+        // if the current node was already visited we have a cycle
+        if curr_idx >= MAX_HANDLES
+            || self.contexts[curr_idx].state == ContextState::Inactive
+            || seen[curr_idx]
+        {
+            return true;
+        }
+        seen[curr_idx] = true;
+        // dfs on all child nodes
+        for child_idx in flags_iter(self.contexts[curr_idx].children, MAX_HANDLES) {
+            if child_idx >= MAX_HANDLES || self.detect_invalid_subtree(child_idx, seen) {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 /// Iterate over all of the bits set to 1 in a u32. Each iteration returns the bit index 0 being the
@@ -443,6 +489,9 @@ pub mod tests {
         ContextHandle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     pub const SIMULATION_HANDLE: ContextHandle =
         ContextHandle([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    pub const RANDOM_HANDLE: ContextHandle = ContextHandle([
+        51, 1, 232, 215, 231, 84, 219, 44, 245, 123, 10, 76, 167, 63, 37, 60,
+    ]);
 
     pub const TEST_LOCALITIES: [u32; 2] = [AUTO_INIT_LOCALITY, u32::from_be_bytes(*b"OTHR")];
 
@@ -476,7 +525,7 @@ pub mod tests {
         command.extend(InitCtxCmd::new_simulation().as_bytes());
         assert_eq!(
             Response::InitCtx(NewHandleResp {
-                handle: SIMULATION_HANDLE,
+                handle: RANDOM_HANDLE,
                 resp_hdr: ResponseHdr::new(DpeErrorCode::NoError),
             }),
             dpe.execute_serialized_command(&mut env, TEST_LOCALITIES[0], &command)
@@ -542,21 +591,16 @@ pub mod tests {
 
         let mut dpe = DpeInstance::new(&mut env, Support::AUTO_INIT).unwrap();
 
-        // Verify bounds checking.
-        assert_eq!(
-            Err(DpeErrorCode::MaxTcis),
-            dpe.add_tci_measurement(
-                &mut env,
-                MAX_HANDLES,
-                &TciMeasurement::default(),
-                TEST_LOCALITIES[0],
-            )
-        );
-
         let data = [1; DPE_PROFILE.get_hash_size()];
-        dpe.add_tci_measurement(&mut env, 0, &TciMeasurement(data), TEST_LOCALITIES[0])
-            .unwrap();
-        let context = &dpe.contexts[0];
+        let mut context = dpe.contexts[0];
+        dpe.add_tci_measurement(
+            &mut env,
+            &mut context,
+            &TciMeasurement(data),
+            TEST_LOCALITIES[0],
+        )
+        .unwrap();
+        dpe.contexts[0] = context;
         assert_eq!(data, context.tci.tci_current.0);
 
         // Compute cumulative.
@@ -569,10 +613,15 @@ pub mod tests {
         assert_eq!(first_cumulative.bytes(), context.tci.tci_cumulative.0);
 
         let data = [2; DPE_PROFILE.get_hash_size()];
-        dpe.add_tci_measurement(&mut env, 0, &TciMeasurement(data), TEST_LOCALITIES[0])
-            .unwrap();
+        dpe.add_tci_measurement(
+            &mut env,
+            &mut context,
+            &TciMeasurement(data),
+            TEST_LOCALITIES[0],
+        )
+        .unwrap();
         // Make sure the current TCI was updated correctly.
-        let context = &dpe.contexts[0];
+        dpe.contexts[0] = context;
         assert_eq!(data, context.tci.tci_current.0);
 
         let mut hasher = env.crypto.hash_initialize(DPE_PROFILE.alg_len()).unwrap();
@@ -715,19 +764,25 @@ pub mod tests {
         .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
         .unwrap();
 
+        let child_context_idx = dpe
+            .get_active_context_pos(&ContextHandle::default(), TEST_LOCALITIES[0])
+            .unwrap();
         let digest = dpe
-            .compute_measurement_hash(&mut env, parent_context_idx)
+            .compute_measurement_hash(&mut env, child_context_idx)
             .unwrap();
         let cdi_with_internal_input_info = env
             .crypto
             .derive_cdi(DPE_PROFILE.alg_len(), &digest, b"DPE")
             .unwrap();
-        let context = &dpe.contexts[parent_context_idx];
-        assert!(context.uses_internal_input_info());
+        let parent_context = &dpe.contexts[parent_context_idx];
+        let child_context = &dpe.contexts[child_context_idx];
+        assert!(child_context.uses_internal_input_info());
+        assert!(!parent_context.uses_internal_input_info());
 
         let mut hasher = env.crypto.hash_initialize(DPE_PROFILE.alg_len()).unwrap();
 
-        hasher.update(context.tci.as_bytes()).unwrap();
+        hasher.update(child_context.tci.as_bytes()).unwrap();
+        hasher.update(parent_context.tci.as_bytes()).unwrap();
         let mut internal_input_info = [0u8; INTERNAL_INPUT_INFO_SIZE];
         dpe.serialize_internal_input_info(&mut env.platform, &mut internal_input_info)
             .unwrap();
@@ -765,19 +820,25 @@ pub mod tests {
         .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
         .unwrap();
 
+        let child_context_idx = dpe
+            .get_active_context_pos(&ContextHandle::default(), TEST_LOCALITIES[0])
+            .unwrap();
         let digest = dpe
-            .compute_measurement_hash(&mut env, parent_context_idx)
+            .compute_measurement_hash(&mut env, child_context_idx)
             .unwrap();
         let cdi_with_internal_input_dice = env
             .crypto
             .derive_cdi(DPE_PROFILE.alg_len(), &digest, b"DPE")
             .unwrap();
-        let context = &dpe.contexts[parent_context_idx];
-        assert!(context.uses_internal_input_dice());
+        let parent_context = &dpe.contexts[parent_context_idx];
+        let child_context = &dpe.contexts[child_context_idx];
+        assert!(child_context.uses_internal_input_dice());
+        assert!(!parent_context.uses_internal_input_dice());
 
         let mut hasher = env.crypto.hash_initialize(DPE_PROFILE.alg_len()).unwrap();
 
-        hasher.update(context.tci.as_bytes()).unwrap();
+        hasher.update(child_context.tci.as_bytes()).unwrap();
+        hasher.update(parent_context.tci.as_bytes()).unwrap();
         hasher
             .update(&TEST_CERT_CHAIN[..TEST_CERT_CHAIN.len()])
             .unwrap();
@@ -788,5 +849,43 @@ pub mod tests {
             .derive_cdi(DPE_PROFILE.alg_len(), &digest, b"DPE")
             .unwrap();
         assert_eq!(answer, cdi_with_internal_input_dice)
+    }
+
+    #[test]
+    fn test_validate_context_tree() {
+        let mut env = DpeEnv::<TestTypes> {
+            crypto: OpensslCrypto::new(),
+            platform: DefaultPlatform,
+        };
+        let mut dpe = DpeInstance::new(&mut env, SUPPORT).unwrap();
+
+        dpe.contexts[0].state = ContextState::Active;
+        dpe.contexts[0].children = 0b100;
+        dpe.contexts[1].state = ContextState::Active;
+        dpe.contexts[1].children = 0b100;
+        dpe.contexts[2].state = ContextState::Active;
+        // validation fails on graph where child has multiple parents
+        assert_eq!(dpe.validate_context_tree(0), false);
+
+        dpe.contexts[0].children = 0b10;
+        // validation passes on a tree in the shape of a linked-list
+        assert_eq!(dpe.validate_context_tree(0), true);
+
+        dpe.contexts[2].children = 0b1;
+        // validation fails on circle graph
+        assert_eq!(dpe.validate_context_tree(0), false);
+
+        dpe.contexts[0].children |= 0b100;
+        dpe.contexts[1].children = 0;
+        dpe.contexts[2].children = 0;
+        // validation passes on a complete binary tree of size 2
+        assert_eq!(dpe.validate_context_tree(0), true);
+
+        dpe.contexts[10].state = ContextState::Active;
+        dpe.contexts[10].children = 1 << 11 | 1 << 12;
+        dpe.contexts[11].state = ContextState::Active;
+        dpe.contexts[12].state = ContextState::Active;
+        // validation fails on a graph with multiple connected components
+        assert_eq!(dpe.validate_context_tree(0), false);
     }
 }
