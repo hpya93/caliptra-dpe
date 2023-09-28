@@ -240,10 +240,8 @@ func checkCertifyKeyTcgUeidExtension(t *testing.T, c *x509.Certificate, label []
 
 // A tcg-dice-MultiTcbInfo extension.
 // This extension SHOULD be marked as critical.
-func parseCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) (*TcgMultiTcbInfo, error) {
+func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) {
 	t.Helper()
-	var multiTcbInfo *TcgMultiTcbInfo
-	var err error
 
 	// Check MultiTcbInfo Extension
 	//tcg-dice-MultiTcbInfo extension
@@ -611,18 +609,21 @@ func testCertifyKey(d TestDPEInstance, t *testing.T, use_simulation bool) {
 
 	var ctx ContextHandle
 	var initCtxResp *InitCtxResp
+	if use_simulation {
+		if d.GetSupport().Simulation {
+			initCtxResp, err := client.InitializeContext(NewInitCtxIsSimulation())
+			if err != nil {
+				t.Fatal("The instance should be able to create a simulation context.")
+			}
+			// Could prove difficult to prove it is a cryptographically secure random.
+			if initCtxResp.Handle == [16]byte{0} {
+				t.Fatal("Incorrect simulation context handle.")
+			}
 
-	if d.GetSupport().Simulation {
-		initCtxResp, err := client.InitializeContext(NewInitCtxIsSimulation())
-		if err != nil {
-			t.Fatal("The instance should be able to create a simulation context.")
+			defer client.DestroyContext(NewDestroyCtx(initCtxResp.Handle, false))
+		} else {
+			t.Errorf("[ERROR]:  DPE instance doesn't support simulation contexts.")
 		}
-		// Could prove difficult to prove it is a cryptographically secure random.
-		if initCtxResp.Handle == [16]byte{0} {
-			t.Fatal("Incorrect simulation context handle.")
-		}
-
-		defer client.DestroyContext(NewDestroyCtx(initCtxResp.Handle, false))
 	}
 	if initCtxResp == nil {
 		//default context
