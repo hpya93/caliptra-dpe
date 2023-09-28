@@ -387,6 +387,8 @@ func parseMultiTcbInfo(der []byte) (*TcgMultiTcbInfo, error) {
 // If IsCA = false, the extension SHOULD contain tcg-dice-kp-attestLoc
 func checkCertifyKeyExtendedKeyUsages(t *testing.T, c *x509.Certificate) {
 	t.Helper()
+	var multiTcbInfo *TcgMultiTcbInfo
+	var err error
 
 	extKeyUsage := []asn1.ObjectIdentifier{}
 
