@@ -58,6 +58,7 @@ var TcgDiceExtendedKeyUsages = [...]string{
 	OidExtensionTcgDiceKpAttestLoc.String(),
 }
 
+// Structure
 // tcg-dice-Ueid OBJECT IDENTIFIER ::= {tcg-dice 4}
 //
 //	TcgUeid ::== SEQUENCE {
