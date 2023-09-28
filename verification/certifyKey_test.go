@@ -138,7 +138,7 @@ func TestCertifyKey_SimulationMode(t *testing.T) {
 			log.Fatalf("[FATAL]: %s", err.Error())
 		}
 	}
-	testCertifyKey(instance, t)
+	testCertifyKey(instance, t, true)
 }
 
 // Ignores critical extensions that are unknown to x509 package
