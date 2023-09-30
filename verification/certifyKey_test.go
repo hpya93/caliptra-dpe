@@ -8,7 +8,6 @@ import (
 	"encoding/asn1"
 	"encoding/binary"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"log"
 	"reflect"
@@ -20,8 +19,6 @@ import (
 	zlint "github.com/zmap/zlint/v3"
 	"github.com/zmap/zlint/v3/lint"
 
-	"golang.org/x/crypto/cryptobyte"
-	cryptobyte_asn1 "golang.org/x/crypto/cryptobyte/asn1"
 	"golang.org/x/exp/slices"
 )
 
