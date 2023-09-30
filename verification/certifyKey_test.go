@@ -254,7 +254,7 @@ func checkCertifyKeyTcgUeidExtension(t *testing.T, c *x509.Certificate, label []
 // This extension SHOULD be marked as critical.
 func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) (TcgMultiTcbInfo, error) {
 	t.Helper()
-	var multiTcbInfo *TcgMultiTcbInfo
+	var multiTcbInfo TcgMultiTcbInfo
 	var err error
 
 	// Check MultiTcbInfo Extension
@@ -265,7 +265,7 @@ func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) (Tc
 				t.Errorf("[ERROR]: TCG DICE MultiTcbInfo extension is not marked as CRITICAL")
 			}
 			//multiTcbInfo, err = parseMultiTcbInfo(ext.Value)
-			_, err = asn1.Unmarshal(ext.Value, multiTcbInfo)
+			_, err = asn1.Unmarshal(ext.Value, &multiTcbInfo)
 			if err != nil {
 				// multiTcb info is not provided in leaf
 				t.Errorf("[ERROR]: Failed to unmarshal MultiTcbInfo field: %v", err)
@@ -275,7 +275,7 @@ func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) (Tc
 			break
 		}
 	}
-	return *multiTcbInfo, err
+	return multiTcbInfo, err
 }
 
 // Check whether certificate extended key usage is as per spec
