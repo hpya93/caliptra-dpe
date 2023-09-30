@@ -264,7 +264,10 @@ func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) (Tc
 			if !ext.Critical {
 				t.Errorf("[ERROR]: TCG DICE MultiTcbInfo extension is not marked as CRITICAL")
 			}
+<<<<<<< HEAD
 			//multiTcbInfo, err = parseMultiTcbInfo(ext.Value)
+=======
+>>>>>>> hari/main
 			_, err = asn1.Unmarshal(ext.Value, &multiTcbInfo)
 			if err != nil {
 				// multiTcb info is not provided in leaf
@@ -576,8 +579,12 @@ func testCertifyKey(d TestDPEInstance, t *testing.T, use_simulation bool) {
 
 		// Ensure full certificate chain has valid signatures
 		// This also checks certificate lifetime, signatures as part of cert chain validation
+<<<<<<< HEAD
 		validateCertChain(t, certChain, leafCert)
 	}
+=======
+		validateLeafCertChain(t, certChain, leafCert)
+>>>>>>> hari/main
 
 	// When DeriveChild is implemented, call it here to add more TCIs
 	// and call CertifyKey again.
