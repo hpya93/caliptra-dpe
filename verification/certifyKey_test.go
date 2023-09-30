@@ -100,19 +100,31 @@ type TcgUeidExtension struct {
 // }
 
 type Fwid struct {
-	HashAlg string
+	HashAlg asn1.ObjectIdentifier
 	Digest  []byte
 }
 
-type DiceTcbInfo struct {
-	Fwids      []Fwid
-	VendorInfo []byte
-	Type       []byte
+type diceTcbInfo struct {
+	Vendor     string          `asn1:"optional,tag:0,utf8"`
+	Model      string          `asn1:"optional,tag:1,utf8"`
+	Version    string          `asn1:"optional,tag:2,utf8"`
+	SVN        int             `asn1:"optional,tag:3"`
+	Layer      int             `asn1:"optional,tag:4"`
+	Index      int             `asn1:"optional,tag:5"`
+	Fwids      []Fwid          `asn1:"optional,tag:6"`
+	Flags      operationalFlag `asn1:"optional,tag:7"`
+	VendorInfo []byte          `asn1:"optional,tag:8"`
+	Type       []byte          `asn1:"optional,tag:9"`
 }
 
-type TcgMultiTcbInfo struct {
-	DiceTcbInfos []DiceTcbInfo
-}
+const (
+	NotConfigured operationalFlag = iota
+	NotSecure
+	Debug
+	Recovery
+)
+
+type TcgMultiTcbInfo = []DiceTcbInfo
 
 func TestCertifyKey(t *testing.T) {
 
@@ -253,7 +265,9 @@ func checkCertifyKeyMultiTcbInfoExtension(t *testing.T, c *x509.Certificate) (*T
 			if !ext.Critical {
 				t.Errorf("[ERROR]: TCG DICE MultiTcbInfo extension is not marked as CRITICAL")
 			}
-			multiTcbInfo, err = parseMultiTcbInfo(ext.Value)
+			//multiTcbInfo, err = parseMultiTcbInfo(ext.Value)
+			var multiTCBInfoData TcgMultiTcbInfo
+			_, err = asn1.Unmarshal(ext.Value, &multiTCBInfoData)
 			if err != nil {
 				// multiTcb info is not provided in leaf
 				t.Errorf("[ERROR]: Failed to unmarshal MultiTcbInfo field: %v", err)
