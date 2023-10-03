@@ -215,9 +215,12 @@ func (c *Client[_, _]) GetCertificateChain() (*GetCertificateChainResp, error) {
 
 		_, err := execCommand(c.transport, CommandGetCertificateChain, c.Profile, cmd, &respStruct)
 		if err == StatusInvalidArgument {
+<<<<<<< HEAD
 			if int(cmd.Size) > MaxChunkSize {
 				return nil, StatusInvalidArgument
 			}
+=======
+>>>>>>> hari/main
 			// This indicates that there are no more bytes to be read in certificate chain
 			break
 		} else if err != nil {
@@ -239,6 +242,7 @@ func (c *Client[_, _]) GetCertificateChain() (*GetCertificateChainResp, error) {
 	return &certs, nil
 }
 
+<<<<<<< HEAD
 // DeriveChild() calls the DPE CertifyKey command.
 func (c *Client[_, Digest]) DeriveChild(cmd *DeriveChildReq[Digest]) (*DeriveChildResp[Digest], error) {
 	var respStruct DeriveChildResp[Digest]
@@ -251,6 +255,8 @@ func (c *Client[_, Digest]) DeriveChild(cmd *DeriveChildReq[Digest]) (*DeriveChi
 	return &respStruct, nil
 }
 
+=======
+>>>>>>> hari/main
 // TagTCI calls the DPE TagTCI command.
 func (c *Client[_, _]) TagTCI(cmd *TagTCIReq) (*TagTCIResp, error) {
 	var respStruct TagTCIResp

@@ -544,6 +544,7 @@ func testCertifyKey(d TestDPEInstance, t *testing.T, use_simulation bool) {
 			Label:         [32]byte{143, 67, 67, 70, 100, 143, 107, 150, 223, 137, 221, 169, 1, 197, 23, 107, 16, 166, 216, 57, 97, 221, 60, 26, 200, 139, 89, 178, 220, 50, 122, 164},
 			Format:        CertifyKeyX509,
 		},
+<<<<<<< HEAD
 	}
 
 	for _, r := range certifyKeyReq {
@@ -600,6 +601,10 @@ func testCertifyKey(d TestDPEInstance, t *testing.T, use_simulation bool) {
 		},
 	}
 
+=======
+	}
+
+>>>>>>> hari/main
 	for _, r := range certifyKeyReq {
 		// Get DPE leaf certificate from CertifyKey
 		certifyKeyResp, err := client.CertifyKey(&r)
@@ -626,12 +631,20 @@ func testCertifyKey(d TestDPEInstance, t *testing.T, use_simulation bool) {
 		// Validate that all X.509 fields conform with the format defined in the DPE iRoT profile
 		validateCertifyKeyCert(t, leafCert, uint32(r.Flags), r.Label[:])
 
+<<<<<<< HEAD
 		// Check type field in Dice TCB block
 		checkDiceTcbInfo(t, leafCert, dreq.InputType)
 
 		// Ensure full certificate chain has valid signatures
 		// This also checks certificate lifetime, signatures as part of cert chain validation
 		validateLeafCertChain(t, certChain, leafCert)
+=======
+		// Ensure full certificate chain has valid signatures
+		// This also checks certificate lifetime, signatures as part of cert chain validation
+		validateLeafCertChain(t, certChain, leafCert)
+
+		// TODO: When DeriveChild is implemented, call it here to add more TCIs and call CertifyKey again.
+>>>>>>> hari/main
 	}
 }
 
