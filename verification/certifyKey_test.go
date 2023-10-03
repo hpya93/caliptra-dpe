@@ -632,6 +632,7 @@ func testCertifyKey(d TestDPEInstance, t *testing.T, use_simulation bool) {
 		// Ensure full certificate chain has valid signatures
 		// This also checks certificate lifetime, signatures as part of cert chain validation
 		validateLeafCertChain(t, certChain, leafCert)
+        }
 }
 
 // Build certificate chain and calls to validateSignature on each chain.
