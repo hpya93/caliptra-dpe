@@ -51,6 +51,7 @@ sudo apt-get install dh-autoreconf libssl-dev \
 Run autogen.sh, make, check, and install
 ```sh
 export SETUP_TPM_EMU_PATH="/tmp/setup_tpm_emulator"
+rm -rf ${SETUP_TPM_EMU_PATH}
 mkdir ${SETUP_TPM_EMU_PATH} && cd ${SETUP_TPM_EMU_PATH}
 git clone https://github.com/stefanberger/swtpm.git
 cd ${SETUP_TPM_EMU_PATH}/swtpm
