@@ -18,7 +18,7 @@ install_dependencies:
 
 # Build and install tpm emulator
 run_autogen_and_install:
-	rm -rf $(SETUP_TPM_EMU_PATH)
+	sudo rm -rf $(SETUP_TPM_EMU_PATH)
 	mkdir $(SETUP_TPM_EMU_PATH) && cd $(SETUP_TPM_EMU_PATH); \
         git clone https://github.com/stefanberger/swtpm.git; \
 	cd swtpm; \

@@ -5,14 +5,14 @@ package verification
 import (
 	"crypto/ecdsa"
 	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"encoding/binary"
 	"flag"
-	"fmt"
 	"io"
 	"math"
 	"math/big"
-	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/go-tpm-tools/client"
@@ -21,7 +21,8 @@ import (
 )
 
 var (
-	tpmPath = flag.String("tpm-path", "/dev/tpm0", "Path to the TPM device (character device or a Unix socket).")
+	tpmPath                    = flag.String("tpm-path", "/dev/tpm0", "Path to the TPM device (character device or a Unix socket).")
+	tpmPolicySigningValidation = flag.String("tpm-policy-signing-validation", "disabled", "Validation of TPM policy signing with Caliptra DPE commands is enabled/disabled. By default, this is disabled.")
 
 	handleNames = map[string][]tpm2.HandleType{
 		"all":       {tpm2.HandleTypeLoadedSession, tpm2.HandleTypeSavedSession, tpm2.HandleTypeTransient},
@@ -32,28 +33,40 @@ var (
 )
 
 func TestTpmPolicySigning(d TestDPEInstance, c DPEClient, t *testing.T) {
-	testTpmPolicySigning(d, c, t)
+	if strings.ToLower(*tpmPolicySigningValidation) == "enabled" {
+		t.Log("Validation of TPM policy signing using Caliptra DPE commands is enabled.")
+		testTpmPolicySigning(d, c, t)
+	} else {
+		t.Log("Validation of TPM policy signing using Caliptra DPE commands is disabled, skipping this test.\n To enable this validation start the TPM emulator, set `go test . -tpm-policy-signing-validation=enabled` and rerun.")
+		return
+	}
 }
 
-func startTpmSession(t *testing.T, tpm io.ReadWriteCloser) (tpmutil.Handle, []byte, error) {
+func startTpmSession(t *testing.T, tpm io.ReadWriteCloser, alg tpm2.Algorithm) (tpmutil.Handle, []byte, error) {
 	totalHandles := 0
 	for _, handleType := range handleNames["all"] {
 		handles, err := client.Handles(tpm, handleType)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error getting handles %s: %v", *tpmPath, err)
-			os.Exit(1)
+			t.Fatalf("[FATAL]: Error getting handles %s: %v", *tpmPath, err)
 		}
 		for _, handle := range handles {
 			if err = tpm2.FlushContext(tpm, handle); err != nil {
-				fmt.Fprintf(os.Stderr, "Error flushing handle 0x%x: %v", handle, err)
-				os.Exit(1)
+				t.Fatalf("[FATAL]: Error flushing handle 0x%x: %v", handle, err)
 			}
 			t.Logf("Handle 0x%x flushed", handle)
 			totalHandles++
 		}
 	}
 
-	sessHandle, nonce, err := tpm2.StartAuthSession(tpm, tpm2.HandleNull, tpm2.HandleNull, make([]byte, 16), nil, tpm2.SessionPolicy, tpm2.AlgNull, tpm2.AlgSHA256)
+	sessHandle, nonce, err := tpm2.StartAuthSession(tpm,
+		tpm2.HandleNull,
+		tpm2.HandleNull,
+		make([]byte, 16),
+		nil,
+		tpm2.SessionPolicy,
+		tpm2.AlgNull,
+		alg)
+
 	if err != nil {
 		t.Fatalf("[FATAL]: StartAuthSession() failed: %v", err)
 	}
@@ -63,36 +76,45 @@ func startTpmSession(t *testing.T, tpm io.ReadWriteCloser) (tpmutil.Handle, []by
 
 func testTpmPolicySigning(d TestDPEInstance, c DPEClient, t *testing.T) {
 	var ctx ContextHandle = [16]byte{0}
-
-	//Create tpm auth session to get nonce and form label which is digest
-	tpm, err := tpm2.OpenTPM(*tpmPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't open TPM %s: %v", *tpmPath, err)
-	}
-
-	sessHandle, nonce, err := startTpmSession(t, tpm)
-	if err != nil {
-		t.Fatalf("[FATAL]: Error in getting tpm nonce")
-	}
-
-	defer func() {
-		if err := tpm.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "can't close TPM %s: %v", *tpmPath, err)
-			os.Exit(1)
-		}
-	}()
-
-	defer tpm2.FlushContext(tpm, sessHandle)
-
-	// Build SignHash request
-	expiry := []int32{math.MinInt32, math.MinInt32 + 1, -1, 0, 1, math.MaxInt32}
-	digest := getDigest(nonce, expiry)
+	var ec tpm2.EllipticCurve
+	var alg tpm2.Algorithm
 
 	profile, err := GetTransportProfile(d)
 	if err != nil {
 		t.Fatalf("Could not get profile: %v", err)
 	}
 	digestLen := profile.GetDigestSize()
+
+	if digestLen == len(SHA256Digest{0}) {
+		alg = tpm2.AlgSHA256
+		ec = tpm2.CurveNISTP256
+	} else if digestLen == len(SHA384Digest{0}) {
+		alg = tpm2.AlgSHA384
+		ec = tpm2.CurveNISTP384
+	}
+
+	//Create tpm auth session to get nonce and form label which is digest
+	tpm, err := tpm2.OpenTPM(*tpmPath)
+	if err != nil {
+		t.Fatalf("[FATAL]: Can't open TPM %s: %v", *tpmPath, err)
+	}
+
+	sessHandle, nonce, err := startTpmSession(t, tpm, alg)
+	if err != nil {
+		t.Fatalf("[FATAL]: Error in getting tpm nonce")
+	}
+
+	defer func() {
+		if err := tpm.Close(); err != nil {
+			t.Fatalf("[FATAL]: Can't close TPM %s: %v", *tpmPath, err)
+		}
+	}()
+
+	defer tpm2.FlushContext(tpm, sessHandle)
+
+	// Build SignHash request
+	expiry := int32(math.MinInt32)
+	digest := getDigest(nonce, expiry, digestLen)
 
 	seqLabel := make([]byte, digestLen)
 	for i, _ := range seqLabel {
@@ -106,7 +128,7 @@ func testTpmPolicySigning(d TestDPEInstance, c DPEClient, t *testing.T) {
 	}{
 		Flags:      SignFlags(0),
 		Label:      seqLabel,
-		ToBeSigned: digest[:],
+		ToBeSigned: digest,
 	}
 
 	// Get signed hash from DPE
@@ -132,18 +154,16 @@ func testTpmPolicySigning(d TestDPEInstance, c DPEClient, t *testing.T) {
 	pubKey := extractPubKey(t, certifyKeyResp.Certificate)
 
 	// Get TPM handle loaded with public key
-	pkh := getPubKeyHandle(t, pubKey, tpm)
+	pkh := getPubKeyHandle(t, pubKey, tpm, alg, ec)
 
 	// Get encoded signature from TPM
-	rBytes := [32]byte(signResp.HmacOrSignatureR)
-	r := new(big.Int).SetBytes(rBytes[:])
-	sBytes := [32]byte(signResp.SignatureS)
-	s := new(big.Int).SetBytes(sBytes[:])
+	r := new(big.Int).SetBytes(signResp.HmacOrSignatureR)
+	s := new(big.Int).SetBytes(signResp.SignatureS)
 
-	encodedSignature := getEncodedSignature(t, r, s)
+	encodedSignature := getEncodedSignature(t, r, s, alg)
 
 	// Verify Policy with Signature
-	_, _, err = tpm2.PolicySigned(tpm, pkh, sessHandle, nonce, nil, nil, expiry[0], encodedSignature)
+	_, _, err = tpm2.PolicySigned(tpm, pkh, sessHandle, nonce, nil, nil, expiry, encodedSignature)
 	if err != nil {
 		t.Fatalf("[FATAL]: PolicySigned() failed: %v", err)
 	}
@@ -151,14 +171,21 @@ func testTpmPolicySigning(d TestDPEInstance, c DPEClient, t *testing.T) {
 	t.Log("[LOG]: PolicySigned() call success")
 }
 
-func getDigest(nonce []byte, expiry []int32) [32]byte {
+func getDigest(nonce []byte, expiry int32, digestLen int) []byte {
 
 	expBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(expBytes, uint32(expiry[0]))
+	binary.BigEndian.PutUint32(expBytes, uint32(expiry))
 
 	toDigest := append(nonce, expBytes...)
 
-	digest := sha256.Sum256(toDigest)
+	digest := make([]byte, digestLen)
+	if digestLen == len(SHA256Digest{0}) {
+		hash := sha256.Sum256(toDigest)
+		digest = hash[:]
+	} else if digestLen == len(SHA384Digest{0}) {
+		hash := sha512.Sum384(toDigest)
+		digest = hash[:]
+	}
 	return digest
 }
 
@@ -186,7 +213,7 @@ func extractPubKey(t *testing.T, leafBytes []byte) any {
 	return pubKey
 }
 
-func getPubKeyHandle(t *testing.T, pubKey any, tpm io.ReadWriteCloser) tpmutil.Handle {
+func getPubKeyHandle(t *testing.T, pubKey any, tpm io.ReadWriteCloser, alg tpm2.Algorithm, ec tpm2.EllipticCurve) tpmutil.Handle {
 	var tpmPublic tpm2.Public
 
 	// Create a tpm2.Public structure from the parsed ECDSA public key
@@ -194,14 +221,14 @@ func getPubKeyHandle(t *testing.T, pubKey any, tpm io.ReadWriteCloser) tpmutil.H
 	case *ecdsa.PublicKey:
 		tpmPublic = tpm2.Public{
 			Type:       tpm2.AlgECC, // ECDSA key type
-			NameAlg:    tpm2.AlgSHA256,
+			NameAlg:    alg,
 			Attributes: tpm2.FlagSign | tpm2.FlagSensitiveDataOrigin | tpm2.FlagUserWithAuth,
 			ECCParameters: &tpm2.ECCParams{
 				Sign: &tpm2.SigScheme{
 					Alg:  tpm2.AlgECDSA,
-					Hash: tpm2.AlgSHA256,
+					Hash: alg,
 				},
-				CurveID: tpm2.CurveNISTP256,
+				CurveID: ec,
 				Point: tpm2.ECPoint{
 					XRaw: new(big.Int).SetBytes(pubKey.X.Bytes()).Bytes(),
 					YRaw: new(big.Int).SetBytes(pubKey.Y.Bytes()).Bytes(),
@@ -222,11 +249,11 @@ func getPubKeyHandle(t *testing.T, pubKey any, tpm io.ReadWriteCloser) tpmutil.H
 	return pkh
 }
 
-func getEncodedSignature(t *testing.T, r *big.Int, s *big.Int) []byte {
+func getEncodedSignature(t *testing.T, r *big.Int, s *big.Int, alg tpm2.Algorithm) []byte {
 	signature := tpm2.Signature{
 		Alg: tpm2.AlgECDSA,
 		ECC: &tpm2.SignatureECC{
-			HashAlg: tpm2.AlgSHA256,
+			HashAlg: alg,
 			R:       r,
 			S:       s,
 		},

@@ -72,21 +72,19 @@ tar -xzvf tpm2-tss-3.1.0.tar.gz && cd tpm2-tss-3.1.0/ && ./configure && sudo mak
 sudo apt-get install tpm2-tools
 ```
 ### Run TPM emulator
-To run the Go test to verify TPM Policy Signing, the emulator needs to be started.
-```sh
-# Cleanup redundant device files if any
-sudo rm -f /dev/tpm0 /dev/tpmrm0
-```
-- Configure and run TPM emulator 
+- To run the Go test to verify TPM Policy Signing, start the TPM emulator.
+- Open separate terminal instance and issue commands to start.
+- When started properly it displays the path of TPM device file.
+- Mostly, TPM device path is /dev/tpm0
 ```sh
 mkdir -p /tmp/myvtpm
 sudo modprobe tpm_vtpm_proxy
 sudo swtpm chardev --vtpm-proxy --tpmstate dir=/tmp/myvtpm --tpm2 --ctrl type=tcp,port=2322     
 ```
-### Run test
+### Run TPM policy signing test
 - Open another instance of terminal.
-- Run the go test
+- Run the go test.
 ```sh
 cd caliptra-dpe/verification
-sudo go test .
+sudo /usr/local/go/bin/go test . -v -tpm-policy-signing-validation="enabled" -tpm-path="/dev/tpm0"
 ```

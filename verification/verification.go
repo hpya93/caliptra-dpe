@@ -48,7 +48,7 @@ var AllTestCases = []TestCase{
 	CertifyKeyTestCase,
 	CertifyKeySimulationTestCase,
 	GetCertificateChainTestCase,
-	// TpmPolicySigningTestCase,
+	TpmPolicySigningTestCase,
 	TagTCITestCase,
 	GetProfileTestCase,
 	InitializeContextTestCase,
