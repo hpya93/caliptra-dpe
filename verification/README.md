@@ -1,7 +1,6 @@
 # DPE Verification Tests
 
 This test suite is a userspace test-suite which exercises DPE commands end-to-end and ensures compliance with the DPE iRoT Profile.
-To run the test suite here are the requirements.
 
 ## Requirements
 Ubuntu 20 LTS and above
