@@ -36,7 +36,6 @@ function format_rust_targets() {
 
 function format_go_targets() {
   ( cd verification
-    make simulator
     test -z "$(gofmt -l .)"
   )
 }
