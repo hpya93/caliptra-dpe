@@ -18,7 +18,7 @@ cd ../verification
 go test .
 ```
 
-## Setting up TPM Emulator
+## Setting up TPM emulator
 The Software TPM (emulator) is required to run a specific test that verifies Caliptra DPE flow with TPM emulator.
 User may choose to configure test requirements either by using Makefile or through command line. 
 
@@ -29,8 +29,8 @@ Users may use the target `setup_tpm_emulator` to install and configure TPM emula
 sudo make setup_tpm_emulator
 ```
 ### Setting up using command line
-Users may use command line instead of Makefile to install and configure TPM emulator if they prefer so.   
-If already configured using Makefile, this section SHALL be skipped to run the emulator.
+Users may use command line instead of Makefile to install and configure TPM emulator.   
+If already configured using Makefile, this section shall be skipped and continue with section giving the steps to run the emulator. 
 
 #### Install dependencies
 Install the dependencies for software TPM installation. 
@@ -88,7 +88,5 @@ sudo swtpm chardev --vtpm-proxy --tpmstate dir=/tmp/myvtpm --tpm2 --ctrl type=tc
 - Run the go test
 ```sh
 cd caliptra-dpe/verification
-
-# sudo is required to access TPM device file
 sudo go test .
 ```
