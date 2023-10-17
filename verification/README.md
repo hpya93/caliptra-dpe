@@ -3,10 +3,10 @@
 This test suite is a userspace test-suite which exercises DPE commands end-to-end and ensures compliance with the DPE iRoT Profile.
 
 ## Requirements
-Ubuntu 20 LTS and above
-Golang >= 1.20
-Make
-Rustup, RustC >= 1.70
+- Ubuntu 20 LTS and above
+- Golang >= 1.20
+- Make
+- Rustup, RustC >= 1.70
 
 ## Setting up Caliptra DPE Simulator
 ```sh
