@@ -23,6 +23,7 @@ run_autogen_and_install:
 
 # Step 3: Set up TPM-related configuration
 setup_tpm:
+        rm -rf tpm0 tpmr0
 	mkdir -p /tmp/myvtpm
 	sudo modprobe tpm_vtpm_proxy
 	sudo swtpm chardev --vtpm-proxy --tpmstate dir=/tmp/myvtpm --tpm2 --ctrl type=tcp,port=2322 
