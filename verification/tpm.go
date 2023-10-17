@@ -20,7 +20,6 @@ import (
 
 var (
 	tpmPath = flag.String("tpm-path", "/dev/tpm0", "Path to the TPM device (character device or a Unix socket).")
-	flush   = flag.String("flush", "all", "Flush existing handles")
 
 	handleNames = map[string][]tpm2.HandleType{
 		"all":       {tpm2.HandleTypeLoadedSession, tpm2.HandleTypeSavedSession, tpm2.HandleTypeTransient},
@@ -36,7 +35,7 @@ func TestTpmPolicySigning(d TestDPEInstance, c DPEClient, t *testing.T) {
 
 func startTpmSession(t *testing.T, tpm io.ReadWriteCloser) (tpmutil.Handle, []byte, error) {
 	totalHandles := 0
-	for _, handleType := range handleNames[*flush] {
+	for _, handleType := range handleNames["all"] {
 		handles, err := client.Handles(tpm, handleType)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error getting handles %s: %v", *tpmPath, err)
