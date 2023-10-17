@@ -86,5 +86,5 @@ sudo swtpm chardev --vtpm-proxy --tpmstate dir=/tmp/myvtpm --tpm2 --ctrl type=tc
 - Run the go test.
 ```sh
 cd caliptra-dpe/verification
-sudo /usr/local/go/bin/go test . -v -tpm-policy-signing-validation="enabled" -tpm-path="/dev/tpm0"
+sudo go test . -v -tpm-policy-signing-validation="enabled" -tpm-path="/dev/tpm0"
 ```
