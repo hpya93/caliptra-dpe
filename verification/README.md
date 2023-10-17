@@ -29,7 +29,7 @@ make -j4 check; \
 sudo make install
 ```
 ## Install TPM tools
-- Install_tpm2_tss:
+- Install_tpm2_tss
 ```sh
 sudo apt-get install libjson-c-dev libssl-dev libcurl4-gnutls-dev -y
 wget https://github.com/tpm2-software/tpm2-tss/releases/download/3.1.0/tpm2-tss-3.1.0.tar.gz
