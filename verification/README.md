@@ -39,6 +39,12 @@ tar -xzvf tpm2-tss-3.1.0.tar.gz && cd tpm2-tss-3.1.0/ && ./configure && sudo mak
 ```sh
 sudo apt-get install tpm2-tools
 ```
+Users have the option to execute the above instructions either manually or by using the 'make simulator' command. To set up and run the TPM emulator, it's necessary to clear the TPM files from the '/dev/tpm' directory before starting the emulator.
+
+## Remove TPM files
+```sh
+sudo rm -f /dev/tpm0 /dev/tpmrm0
+```
 ## Install and run TPM emulator
 - Configure and run software TPM
 ```sh
