@@ -3,7 +3,7 @@
 This test suite is a userspace test-suite which exercises DPE commands end-to-end and ensures compliance with the DPE iRoT Profile.
 The following configuration is required to run a specific test that verifies Caliptra DPE flow with TPM emulator.
 
-# Step 1: Install dependencies
+## Install dependencies
 Install the dependencies for software TPM installation. 
 ```sh
 sudo apt-get update && \
@@ -18,7 +18,7 @@ sudo apt-get install dh-autoreconf libssl-dev \
 	libgnutls28-dev expect gawk socat \
 	libseccomp-dev make -y
 ```
-# Step 2: Build TPM emulator
+## Build TPM emulator
 Run autogen.sh, make, check, and install
 ```sh
 git clone https://github.com/stefanberger/swtpm.git; \
@@ -28,7 +28,7 @@ make -j4; \
 make -j4 check; \
 sudo make install
 ```
-# Step 3: Install TPM tools
+## Install TPM tools
 - Install_tpm2_tss:
 ```sh
 sudo apt-get install libjson-c-dev libssl-dev libcurl4-gnutls-dev -y
@@ -39,14 +39,14 @@ tar -xzvf tpm2-tss-3.1.0.tar.gz && cd tpm2-tss-3.1.0/ && ./configure && sudo mak
 ```sh
 sudo apt-get install tpm2-tools
 ```
-# Step 5: Run TPM emulator
+## Install and run TPM emulator
 - Configure and run software TPM
 ```sh
 mkdir -p /tmp/myvtpm
 sudo modprobe tpm_vtpm_proxy
 sudo swtpm chardev --vtpm-proxy --tpmstate dir=/tmp/myvtpm --tpm2 --ctrl type=tcp,port=2322     
 ```
-# Step 6: Run GO test
+## Run test
 - Open another instance of terminal.
 - Run the go tests
 ```sh
