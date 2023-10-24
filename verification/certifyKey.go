@@ -119,7 +119,7 @@ func TestCertifyKey(d TestDPEInstance, c DPEClient, t *testing.T) {
 	testCertifyKey(d, c, t, false)
 }
 
-func TestCertifyKey_SimulationMode(d TestDPEInstance, c DPEClient, t *testing.T) {
+func TestCertifyKeySimulation(d TestDPEInstance, c DPEClient, t *testing.T) {
 	testCertifyKey(d, c, t, true)
 }
 
@@ -431,9 +431,9 @@ func checkCertificateStructure(t *testing.T, certBytes []byte) *x509.Certificate
 	return x509Cert
 }
 
-func testCertifyKey(d TestDPEInstance, client DPEClient, t *testing.T, use_simulation bool) {
+func testCertifyKey(d TestDPEInstance, client DPEClient, t *testing.T, simulation bool) {
 	var ctx ContextHandle
-	if use_simulation {
+	if simulation {
 		if d.GetSupport().Simulation {
 			handle, err := client.InitializeContext(InitIsSimulation)
 			if err != nil {
@@ -465,13 +465,13 @@ func testCertifyKey(d TestDPEInstance, client DPEClient, t *testing.T, use_simul
 	digestLen := profile.GetDigestSize()
 
 	seqLabel := make([]byte, digestLen)
-	for i, _ := range seqLabel {
+	for i := range seqLabel {
 		seqLabel[i] = byte(i)
 	}
 
 	certifyKeyParams := []Params{
-		Params{Label: make([]byte, digestLen), Flags: CertifyKeyFlags(0)},
-		Params{Label: seqLabel, Flags: CertifyKeyFlags(0)},
+		{Label: make([]byte, digestLen), Flags: CertifyKeyFlags(0)},
+		{Label: seqLabel, Flags: CertifyKeyFlags(0)},
 	}
 
 	for _, params := range certifyKeyParams {
@@ -553,11 +553,6 @@ func buildVerifyOptions(t *testing.T, certChain []*x509.Certificate) x509.Verify
 	}
 
 	return opts
-}
-
-func extractFlagBit(pos int, flags uint32) bool {
-	var mask uint32 = (1 << pos)
-	return (flags & mask) > 0
 }
 
 func getKeyUsageNames(keyUsage x509.KeyUsage) []string {
