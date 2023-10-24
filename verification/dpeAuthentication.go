@@ -63,11 +63,11 @@ func testDPEInstanceAuthentication(d TestDPEInstance, c DPEClient, t *testing.T)
 }
 
 func verifySignature(publicKey *ecdsa.PublicKey, toBeSigned []byte, signResp *DPESignedHash, t *testing.T) {
-	r1 := signResp.HmacOrSignatureR
-	r := new(big.Int).SetBytes(r1)
-	s1 := signResp.SignatureS
-	s := new(big.Int).SetBytes(s1)
-	valid := ecdsa.Verify(publicKey, toBeSigned[:], r, s)
+	r := signResp.HmacOrSignatureR
+	s := signResp.SignatureS
+	valid := ecdsa.Verify(publicKey, toBeSigned,
+		new(big.Int).SetBytes(r),
+		new(big.Int).SetBytes(s))
 	if valid {
 		t.Logf("[LOG]: Validation result:verify sign, %v", valid)
 	} else {
