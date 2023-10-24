@@ -59,10 +59,14 @@ func testDPEInstanceAuthentication(d TestDPEInstance, c DPEClient, t *testing.T)
 	}
 
 	// Verify Signature created by DPE private key using Public key exposed in certificate
-	r1 := [32]byte(signResp.HmacOrSignatureR)
-	r := new(big.Int).SetBytes(r1[:])
-	s1 := [32]byte(signResp.SignatureS)
-	s := new(big.Int).SetBytes(s1[:])
+	verifySignature(publicKey, toBeSigned[:], signResp, t)
+}
+
+func verifySignature(publicKey *ecdsa.PublicKey, toBeSigned []byte, signResp *DPESignedHash, t *testing.T) {
+	r1 := signResp.HmacOrSignatureR
+	r := new(big.Int).SetBytes(r1)
+	s1 := signResp.SignatureS
+	s := new(big.Int).SetBytes(s1)
 	valid := ecdsa.Verify(publicKey, toBeSigned[:], r, s)
 	if valid {
 		t.Logf("[LOG]: Validation result:verify sign, %v", valid)
